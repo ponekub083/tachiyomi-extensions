@@ -9,16 +9,16 @@ class Niceoppai : Madara("Niceoppai", "https://www.niceoppai.net", "th") {
     private fun parseMangaFromElement(element: Element): SManga {
         val manga = SManga.create()
         with(element) {
-            select(popularMangaUrlSelector +" div.det a").first()?.let {
+            select(popularMangaUrlSelector + " div.det a").first()?.let {
                 manga.setUrlWithoutDomain(it.attr("abs:href"))
                 manga.title = it.ownText()
             }
-            select(popularMangaUrlSelector +" div.cur img").first()?.let {
+            select(popularMangaUrlSelector + " div.cur img").first()?.let {
                 manga.thumbnail_url = imageFromElement(it)
             }
         }
         return manga
     }
     override fun popularMangaFromElement(element: Element) = parseMangaFromElement(element)
-    override fun searchMangaFromElement(element: Element) =  parseMangaFromElement(element)
+    override fun searchMangaFromElement(element: Element) = parseMangaFromElement(element)
 }
