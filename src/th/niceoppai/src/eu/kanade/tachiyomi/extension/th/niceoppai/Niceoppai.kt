@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.extension.th.niceoppai
 
-import android.util.Log
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.source.model.Filter
@@ -90,6 +89,7 @@ open class Niceoppai : ParsedHttpSource() {
                     }
 
                 MangasPage(mangas, false)
+
             }
     }
 
@@ -214,33 +214,7 @@ open class Niceoppai : ParsedHttpSource() {
 
         return chapter
     }
-
-//    override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> {
-//
-//        return client.newCall(GET("$baseUrl/${manga.url}"))
-//            .asObservableSuccess()
-//            .map {
-//                val chList: List<SChapter>
-//                val mangaDocument = it.asJsoup()
-//
-//                if (mangaDocument.select(chapterListSelector()).isEmpty()) {
-//                    manga.status = SManga.COMPLETED
-//                    val createdChapter = SChapter.create().apply {
-//                        url = manga.url
-//                        name = "Chapter 1"
-//                        chapter_number = 1.0f
-//                    }
-//                    chList = listOf(createdChapter)
-//                } else {
-//                    chList =
-//                        mangaDocument.select(chapterListSelector()).mapIndexed { idx, Chapter ->
-//                            chapterFromElementWithIndex(Chapter, idx, manga)
-//                        }
-//                }
-//                chList
-//            }
-//    }
-
+    
     override fun chapterListRequest(manga: SManga): Request {
         Log.w("chapterListRequest", "$baseUrl/${manga.url}")
         return GET("$baseUrl/${manga.url}", headers)
