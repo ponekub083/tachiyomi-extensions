@@ -22,7 +22,7 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-open class Niceoppai : ParsedHttpSource() {
+class Niceoppai : ParsedHttpSource() {
 
     private val dateFormat: SimpleDateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.US)
     override val baseUrl: String = "https://www.niceoppai.net"
