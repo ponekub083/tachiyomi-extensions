@@ -221,17 +221,12 @@ open class Niceoppai : ParsedHttpSource() {
     }
 
     override fun chapterListParse(response: Response): List<SChapter> {
-
-        Log.w("chapterListParse", response.toString())
         val document = response.asJsoup()
-
         val listPage = document.select("ul.pgg li a")
             .filter { it.text() != "Next" && it.text() != "Last" }
             .map { it.select("a").attr("href") }
             .distinct()
-
-        Log.w("chapterListParse", listPage.toString())
-        Log.w("chapterListParse", "isNotEmpty : " + listPage.isNotEmpty().toString())
+            
         val chList: MutableList<SChapter> = mutableListOf()
         if (listPage.isNotEmpty()) {
             listPage.forEach { urlPage ->
@@ -256,8 +251,6 @@ open class Niceoppai : ParsedHttpSource() {
                     chapterFromElementWithIndex(Chapter, idx, SManga.create())
                 }
         }
-
-        Log.w("chapterListParse", chList.toString())
         return chList
     }
 
