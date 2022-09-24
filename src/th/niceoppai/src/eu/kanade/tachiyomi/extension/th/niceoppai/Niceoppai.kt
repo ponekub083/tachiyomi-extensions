@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.source.online.ParsedHttpSource
 import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import rx.Observable
@@ -78,7 +79,7 @@ open class Niceoppai : ParsedHttpSource() {
     override fun searchMangaSelector(): String = popularMangaSelector()
     override fun searchMangaFromElement(element: Element): SManga = popularMangaFromElement(element)
     override fun searchMangaNextPageSelector(): String = popularMangaNextPageSelector()
-    override fun fetchSearchManga(page: Int,query: String,filters: FilterList): Observable<MangasPage> {
+    override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
         return client.newCall(searchMangaRequest(page, query, filters))
             .asObservableSuccess()
             .map {
@@ -213,30 +214,77 @@ open class Niceoppai : ParsedHttpSource() {
 
         return chapter
     }
-    override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> {
 
-        return client.newCall(GET("$baseUrl/${manga.url}"))
-            .asObservableSuccess()
-            .map {
-                val chList: List<SChapter>
-                val mangaDocument = it.asJsoup()
+//    override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> {
+//
+//        return client.newCall(GET("$baseUrl/${manga.url}"))
+//            .asObservableSuccess()
+//            .map {
+//                val chList: List<SChapter>
+//                val mangaDocument = it.asJsoup()
+//
+//                if (mangaDocument.select(chapterListSelector()).isEmpty()) {
+//                    manga.status = SManga.COMPLETED
+//                    val createdChapter = SChapter.create().apply {
+//                        url = manga.url
+//                        name = "Chapter 1"
+//                        chapter_number = 1.0f
+//                    }
+//                    chList = listOf(createdChapter)
+//                } else {
+//                    chList =
+//                        mangaDocument.select(chapterListSelector()).mapIndexed { idx, Chapter ->
+//                            chapterFromElementWithIndex(Chapter, idx, manga)
+//                        }
+//                }
+//                chList
+//            }
+//    }
 
+    override fun chapterListRequest(manga: SManga): Request {
+        Log.w("chapterListRequest", "$baseUrl/${manga.url}")
+        return GET("$baseUrl/${manga.url}", headers)
+    }
+
+    override fun chapterListParse(response: Response): List<SChapter> {
+
+        Log.w("chapterListParse", response.toString())
+        val document = response.asJsoup()
+
+        val listPage = document.select("ul.pgg li a")
+            .filter { it.text() != "Next" && it.text() != "Last" }
+            .map { it.select("a").attr("href") }
+            .distinct()
+
+        Log.w("chapterListParse", listPage.toString())
+        Log.w("chapterListParse", "isNotEmpty : " + listPage.isNotEmpty().toString())
+        val chList: MutableList<SChapter> = mutableListOf()
+        if (listPage.isNotEmpty()) {
+            listPage.forEach { urlPage ->
+                val res: Response = client.newCall(GET(urlPage, headers)).execute()
+                val mangaDocument = res.asJsoup()
                 if (mangaDocument.select(chapterListSelector()).isEmpty()) {
-                    manga.status = SManga.COMPLETED
                     val createdChapter = SChapter.create().apply {
-                        url = manga.url
                         name = "Chapter 1"
                         chapter_number = 1.0f
                     }
-                    chList = listOf(createdChapter)
+                    chList += listOf(createdChapter)
                 } else {
-                    chList =
+                    chList +=
                         mangaDocument.select(chapterListSelector()).mapIndexed { idx, Chapter ->
-                            chapterFromElementWithIndex(Chapter, idx, manga)
+                            chapterFromElementWithIndex(Chapter, idx, SManga.create())
                         }
                 }
-                chList
             }
+        } else {
+            chList +=
+                document.select(chapterListSelector()).mapIndexed { idx, Chapter ->
+                    chapterFromElementWithIndex(Chapter, idx, SManga.create())
+                }
+        }
+
+        Log.w("chapterListParse", chList.toString())
+        return chList
     }
 
     // Pages
