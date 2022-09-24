@@ -71,7 +71,6 @@ open class Niceoppai : ParsedHttpSource() {
         val orderByState = if (filters.list.first().state != null) filters.first().state.toString().toInt() else 0
         val orderByString = orderByFilterOptionsValues[orderByState]
 
-        Log.w("searchMangaRequest", isOrderByFilter.toString())
         return if (isOrderByFilter) GET("$baseUrl/manga_list/all/any/$orderByString/$page", headers)
         else GET("$baseUrl/manga_list/search/$query/$orderByString/$page", headers)
     }
@@ -214,9 +213,8 @@ open class Niceoppai : ParsedHttpSource() {
 
         return chapter
     }
-    
+
     override fun chapterListRequest(manga: SManga): Request {
-        Log.w("chapterListRequest", "$baseUrl/${manga.url}")
         return GET("$baseUrl/${manga.url}", headers)
     }
 
@@ -226,7 +224,7 @@ open class Niceoppai : ParsedHttpSource() {
             .filter { it.text() != "Next" && it.text() != "Last" }
             .map { it.select("a").attr("href") }
             .distinct()
-            
+
         val chList: MutableList<SChapter> = mutableListOf()
         if (listPage.isNotEmpty()) {
             listPage.forEach { urlPage ->
