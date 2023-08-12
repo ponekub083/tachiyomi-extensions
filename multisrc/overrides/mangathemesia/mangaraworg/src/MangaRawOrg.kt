@@ -15,14 +15,11 @@ import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import rx.Observable
-import java.util.concurrent.TimeUnit
 
 class MangaRawOrg : MangaThemesia("Manga Raw.org", "https://mangaraw.org", "ja") {
     override val id = 6223520752496636410
 
-    override val client: OkHttpClient = network.cloudflareClient.newBuilder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+    override val client: OkHttpClient = super.client.newBuilder()
         .rateLimit(4)
         .build()
 
@@ -59,7 +56,7 @@ class MangaRawOrg : MangaThemesia("Manga Raw.org", "https://mangaraw.org", "ja")
     }
 
     private fun pageListParse(response: Response, chapterUrl: String): List<Page> {
-        return response.asJsoup().select("span.page-link").first().ownText().substringAfterLast(" ").toInt()
+        return response.asJsoup().select("span.page-link").first()!!.ownText().substringAfterLast(" ").toInt()
             .let { lastNum -> IntRange(1, lastNum) }
             .map { num -> Page(num, "$chapterUrl/$num") }
     }

@@ -1,13 +1,11 @@
 include(":core")
 
-include(":lib-dataimage")
-project(":lib-dataimage").projectDir = File("lib/dataimage")
-
-include(":lib-unpacker")
-project(":lib-unpacker").projectDir = File("lib/unpacker")
-
-include(":lib-cryptoaes")
-project(":lib-cryptoaes").projectDir = File("lib/cryptoaes")
+// all the directories under /lib instead of manually adding each to a list
+File(rootDir, "lib").eachDir {
+    val libName = it.name
+    include(":lib-$libName")
+    project(":lib-$libName").projectDir = File("lib/$libName")
+}
 
 if (System.getenv("CI") == null || System.getenv("CI_MODULE_GEN") == "true") {
     // Local development (full project build)

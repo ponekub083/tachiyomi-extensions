@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.extension.zh.jinmantiantang
 
-import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.network.GET
@@ -24,8 +23,6 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
 import rx.Observable
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -36,10 +33,11 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
     override val supportsLatest: Boolean = true
 
     private val preferences: SharedPreferences =
-        Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
+        getSharedPreferences(id)
 
-    override val baseUrl: String = "https://" + preferences.getString(USE_MIRROR_URL_PREF, "0")!!
-        .toInt().coerceAtMost(SITE_ENTRIES_ARRAY.size - 1).let { SITE_ENTRIES_ARRAY[it] }
+    override val baseUrl: String = "https://" + preferences.baseUrl
+
+    private val updateUrlInterceptor = UpdateUrlInterceptor(preferences)
 
     // 处理URL请求
     override val client: OkHttpClient = network.cloudflareClient
@@ -50,6 +48,7 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
             preferences.getString(MAINSITE_RATELIMIT_PREF, MAINSITE_RATELIMIT_PREF_DEFAULT)!!.toInt(),
             preferences.getString(MAINSITE_RATELIMIT_PERIOD, MAINSITE_RATELIMIT_PERIOD_DEFAULT)!!.toLong(),
         )
+        .apply { interceptors().add(0, updateUrlInterceptor) }
         .addInterceptor(ScrambledImageInterceptor).build()
 
     // 点击量排序(人气)
@@ -63,7 +62,7 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
     }
 
     private fun List<SManga>.filterGenre(): List<SManga> {
-        val removedGenres = preferences.getString("BLOCK_GENRES_LIST", "")!!.substringBefore("//").trim()
+        val removedGenres = preferences.getString(BLOCK_PREF, "")!!.substringBefore("//").trim()
         if (removedGenres.isEmpty()) return this
         val removedList = removedGenres.lowercase().split(' ')
         return this.filterNot { manga ->
@@ -75,8 +74,8 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
         val children = element.children()
         if (children[0].tagName() == "a") children.removeFirst()
         title = children[1].text()
-        setUrlWithoutDomain(children[0].selectFirst("a").attr("href"))
-        val img = children[0].selectFirst("img")
+        setUrlWithoutDomain(children[0].selectFirst("a")!!.attr("href"))
+        val img = children[0].selectFirst("img")!!
         thumbnail_url = img.attr("data-original").ifEmpty { img.attr("src") }.substringBeforeLast('?')
         author = children[2].select("a").joinToString(", ") { it.text() }
         genre = children[3].select("a").joinToString(", ") { it.text() }
@@ -111,8 +110,8 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
     }
 
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
-        return if (query.startsWith(PREFIX_ID_SEARCH)) {
-            val id = query.removePrefix(PREFIX_ID_SEARCH)
+        return if (query.startsWith(PREFIX_ID_SEARCH_NO_COLON, true) || query.toIntOrNull() != null) {
+            val id = query.removePrefix(PREFIX_ID_SEARCH_NO_COLON).removePrefix(":")
             client.newCall(searchMangaByIdRequest(id))
                 .asObservableSuccess()
                 .map { response -> searchMangaByIdParse(response, id) }
@@ -161,26 +160,22 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
     // 漫画详情
 
     override fun mangaDetailsParse(document: Document): SManga = SManga.create().apply {
-        title = document.selectFirst("h1").text()
+        title = document.selectFirst("h1")!!.text()
         // keep thumbnail_url same as the one in popularMangaFromElement()
-        thumbnail_url = document.selectFirst(".thumb-overlay > img").attr("src").substringBeforeLast('.') + "_3x4.jpg"
+        thumbnail_url = document.selectFirst(".thumb-overlay > img")!!.attr("src").substringBeforeLast('.') + "_3x4.jpg"
         author = selectAuthor(document)
         genre = selectDetailsStatusAndGenre(document, 0).trim().split(" ").joinToString(", ")
 
         // When the index passed by the "selectDetailsStatusAndGenre(document: Document, index: Int)" index is 1,
         // it will definitely return a String type of 0, 1 or 2. This warning can be ignored
         status = selectDetailsStatusAndGenre(document, 1).trim().toInt()
-        description = document.selectFirst("#intro-block .p-t-5.p-b-5").text().substringAfter("敘述：").trim()
+        description = document.selectFirst("#intro-block .p-t-5.p-b-5")!!.text().substringAfter("敘述：").trim()
     }
 
     // 查询作者信息
     private fun selectAuthor(document: Document): String {
         val element = document.select("div.panel-body div.tag-block")[3]
-        return if (element.select("a").size == 0) {
-            "未知"
-        } else {
-            element.select("a").text().trim().replace(" ", ", ")
-        }
+        return element.select(".btn-primary").joinToString { it.text() }
     }
 
     // 查询漫画状态和类别信息
@@ -194,7 +189,7 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
                 genre
             }
         }
-        val elements: Elements = document.select("span[itemprop=genre]").first().select("a")
+        val elements: Elements = document.select("span[itemprop=genre]").first()!!.select("a")
         for (value in elements) {
             when (val vote: String = value.select("a").text()) {
                 "連載中" -> {
@@ -222,7 +217,7 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
 
     override fun chapterFromElement(element: Element): SChapter = SChapter.create().apply {
         url = element.select("a").attr("href")
-        name = element.select("a li").first().ownText()
+        name = element.select("a li").first()!!.ownText()
         date_upload = sdf.parse(element.select("a li span.hidden-xs").text().trim())?.time ?: 0
     }
 
@@ -232,7 +227,7 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
             val singleChapter = SChapter.create().apply {
                 name = "单章节"
                 url = document.select("a[class=col btn btn-primary dropdown-toggle reading]").attr("href")
-                date_upload = sdf.parse(document.select("[itemprop=datePublished]").last().attr("content"))?.time
+                date_upload = sdf.parse(document.select("[itemprop=datePublished]").last()!!.attr("content"))?.time
                     ?: 0
             }
             return listOf(singleChapter)
@@ -270,7 +265,7 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
     override fun getFilterList() = FilterList(
         CategoryGroup(),
         SortFilter(),
-        TimeFilter()
+        TimeFilter(),
     )
 
     private class CategoryGroup : UriPartFilter(
@@ -348,8 +343,8 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
             Pair("非H", "/search/photos?search_query=非H&"),
             Pair("血腥", "/search/photos?search_query=血腥&"),
             Pair("暴力", "/search/photos?search_query=暴力&"),
-            Pair("血腥暴力", "/search/photos?search_query=血腥暴力&")
-        )
+            Pair("血腥暴力", "/search/photos?search_query=血腥暴力&"),
+        ),
     )
 
     private class SortFilter : UriPartFilter(
@@ -358,8 +353,8 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
             Pair("最新", "o=mr&"),
             Pair("最多浏览", "o=mv&"),
             Pair("最多爱心", "o=tf&"),
-            Pair("最多图片", "o=mp&")
-        )
+            Pair("最多图片", "o=mp&"),
+        ),
     )
 
     private class TimeFilter : UriPartFilter(
@@ -368,8 +363,8 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
             Pair("全部", "t=a"),
             Pair("今天", "t=t"),
             Pair("这周", "t=w"),
-            Pair("本月", "t=m")
-        )
+            Pair("本月", "t=m"),
+        ),
     )
 
     /**
@@ -381,16 +376,17 @@ class Jinmantiantang : ParsedHttpSource(), ConfigurableSource {
     private open class UriPartFilter(
         displayName: String,
         val vals: Array<Pair<String, String>>,
-        defaultValue: Int = 0
+        defaultValue: Int = 0,
     ) :
         Filter.Select<String>(displayName, vals.map { it.first }.toTypedArray(), defaultValue) {
         open fun toUriPart() = vals[state].second
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        getPreferenceList(screen.context).forEach { screen.addPreference(it) }
+        getPreferenceList(screen.context, preferences, updateUrlInterceptor.isUpdated).forEach(screen::addPreference)
     }
     companion object {
-        const val PREFIX_ID_SEARCH = "JM:"
+        private const val PREFIX_ID_SEARCH_NO_COLON = "JM"
+        const val PREFIX_ID_SEARCH = "$PREFIX_ID_SEARCH_NO_COLON:"
     }
 }

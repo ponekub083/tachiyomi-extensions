@@ -4,6 +4,7 @@ on:
   pull_request:
     paths-ignore:
       - '**.md'
+      - '.github/workflows/issue_moderator.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -38,7 +39,7 @@ jobs:
 
       - id: get-changed-files
         name: Get changed files
-        uses: Ana06/get-changed-files@v2.1.0
+        uses: Ana06/get-changed-files@v2.2.0
 
       - id: parse-changed-files
         name: Parse changed files
@@ -50,18 +51,22 @@ jobs:
               isIndividualChanged=1
             elif [[ ${changedFile} == multisrc/* ]]; then
               isMultisrcChanged=1
+            elif [[ ${changedFile} == .github/workflows/issue_moderator.yml ]]; then
+              true
+            elif [[ ${changedFile} == *.md ]]; then
+              true 
             else
               isIndividualChanged=1
               isMultisrcChanged=1
               break
             fi
           done
-          echo "::set-output name=isIndividualChanged::$isIndividualChanged"
-          echo "::set-output name=isMultisrcChanged::$isMultisrcChanged"
+          echo "isIndividualChanged=$isIndividualChanged" >> $GITHUB_OUTPUT
+          echo "isMultisrcChanged=$isMultisrcChanged" >> $GITHUB_OUTPUT
 
       - name: Generate multisrc sources
         if: ${{ steps.parse-changed-files.outputs.isMultisrcChanged == '1' }}
-        uses: gradle/gradle-command-action@v2
+        uses: gradle/gradle-build-action@v2
         with:
           arguments: :multisrc:generateExtensions
 
@@ -109,7 +114,7 @@ jobs:
           distribution: adopt
 
       - name: Generate sources from the multi-source library
-        uses: gradle/gradle-command-action@v2
+        uses: gradle/gradle-build-action@v2
         env:
           CI_MODULE_GEN: "true"
         with:
@@ -117,7 +122,7 @@ jobs:
           cache-read-only: true
 
       - name: Build extensions (chunk ${{ matrix.chunk }})
-        uses: gradle/gradle-command-action@v2
+        uses: gradle/gradle-build-action@v2
         env:
           CI_MULTISRC: "true"
           CI_CHUNK_NUM: ${{ matrix.chunk }}
@@ -143,7 +148,7 @@ jobs:
           distribution: adopt
 
       - name: Build extensions (chunk ${{ matrix.chunk }})
-        uses: gradle/gradle-command-action@v2
+        uses: gradle/gradle-build-action@v2
         env:
           CI_MULTISRC: "false"
           CI_CHUNK_NUM: ${{ matrix.chunk }}

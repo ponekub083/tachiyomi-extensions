@@ -7,11 +7,14 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 class ManhwaIndo : MangaThemesia(
-    "Manhwa Indo", "https://manhwaindo.id", "id", "/series",
-    SimpleDateFormat("MMMM dd, yyyy", Locale("id"))
+    "Manhwa Indo",
+    "https://manhwaindo.id",
+    "id",
+    "/series",
+    SimpleDateFormat("MMMM dd, yyyy", Locale("id")),
 ) {
 
-    override fun headersBuilder(): Headers.Builder = Headers.Builder()
+    override fun headersBuilder(): Headers.Builder = super.headersBuilder()
         .add("Referer", baseUrl)
 
     override fun mangaDetailsParse(document: Document) = super.mangaDetailsParse(document).apply {

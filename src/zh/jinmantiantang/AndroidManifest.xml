@@ -23,14 +23,6 @@
                     android:pathPattern="/album/..*"
                     android:scheme="https" />
                 <data
-                    android:host="jmcomic.asia"
-                    android:pathPattern="/album/..*"
-                    android:scheme="https" />
-                <data
-                    android:host="jmcomic1.city"
-                    android:pathPattern="/album/..*"
-                    android:scheme="https" />
-                <data
                     android:host="jmcomic.me"
                     android:pathPattern="/album/..*"
                     android:scheme="https" />

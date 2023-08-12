@@ -9,9 +9,9 @@ import java.util.concurrent.TimeUnit
 
 class FayScans : Madara(
     "Fay Scans",
-    "https://fayscans.com",
+    "https://fayscans.com.br",
     "pt-BR",
-    SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR"))
+    SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")),
 ) {
 
     override val client: OkHttpClient = super.client.newBuilder()

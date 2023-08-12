@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.extension.es.lectormanga
 import android.app.Application
 import android.content.SharedPreferences
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.network.interceptor.rateLimitHost
 import eu.kanade.tachiyomi.source.ConfigurableSource
@@ -14,6 +15,7 @@ import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.ParsedHttpSource
 import eu.kanade.tachiyomi.util.asJsoup
+import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -37,12 +39,8 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
 
     override val supportsLatest = true
 
-    private val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/80.0.3987.132 Safari/537.36"
-
     override fun headersBuilder(): Headers.Builder {
         return Headers.Builder()
-            .add("User-Agent", userAgent)
             .add("Referer", "$baseUrl/")
     }
 
@@ -55,29 +53,34 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
     override val client: OkHttpClient = network.client.newBuilder()
         .rateLimitHost(
             baseUrl.toHttpUrlOrNull()!!,
-            preferences.getString(WEB_RATELIMIT_PREF, WEB_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(), 60
+            preferences.getString(WEB_RATELIMIT_PREF, WEB_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(),
+            60,
         )
         .rateLimitHost(
             imageCDNUrls[0].toHttpUrlOrNull()!!,
-            preferences.getString(IMAGE_CDN_RATELIMIT_PREF, IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(), 60
+            preferences.getString(IMAGE_CDN_RATELIMIT_PREF, IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(),
+            60,
         )
         .rateLimitHost(
             imageCDNUrls[1].toHttpUrlOrNull()!!,
-            preferences.getString(IMAGE_CDN_RATELIMIT_PREF, IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(), 60
+            preferences.getString(IMAGE_CDN_RATELIMIT_PREF, IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(),
+            60,
         )
         .rateLimitHost(
             imageCDNUrls[2].toHttpUrlOrNull()!!,
-            preferences.getString(IMAGE_CDN_RATELIMIT_PREF, IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(), 60
+            preferences.getString(IMAGE_CDN_RATELIMIT_PREF, IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(),
+            60,
         )
         .rateLimitHost(
             imageCDNUrls[3].toHttpUrlOrNull()!!,
-            preferences.getString(IMAGE_CDN_RATELIMIT_PREF, IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(), 60
+            preferences.getString(IMAGE_CDN_RATELIMIT_PREF, IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE)!!.toInt(),
+            60,
         )
         .build()
 
     override fun popularMangaRequest(page: Int) = GET("$baseUrl/library?order_item=likes_count&order_dir=desc&type=&filter_by=title&page=$page", headers)
 
-    override fun popularMangaNextPageSelector() = ".pagination .page-item:not(.disabled) a[rel='next']"
+    override fun popularMangaNextPageSelector() = "a[rel='next']"
 
     override fun popularMangaSelector() = ".col-6 .card"
 
@@ -117,7 +120,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
                         url.addQueryParameter("order_item", SORTABLES[filter.state!!.index].second)
                         url.addQueryParameter(
                             "order_dir",
-                            if (filter.state!!.ascending) { "asc" } else { "desc" }
+                            if (filter.state!!.ascending) { "asc" } else { "desc" },
                         )
                     }
                 }
@@ -128,7 +131,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
                             Filter.TriState.STATE_INCLUDE -> "true"
                             Filter.TriState.STATE_EXCLUDE -> "false"
                             else -> ""
-                        }
+                        },
                     )
                 }
                 is FourKomaFilter -> {
@@ -138,7 +141,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
                             Filter.TriState.STATE_INCLUDE -> "true"
                             Filter.TriState.STATE_EXCLUDE -> "false"
                             else -> ""
-                        }
+                        },
                     )
                 }
                 is AmateurFilter -> {
@@ -148,7 +151,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
                             Filter.TriState.STATE_INCLUDE -> "true"
                             Filter.TriState.STATE_EXCLUDE -> "false"
                             else -> ""
-                        }
+                        },
                     )
                 }
                 is EroticFilter -> {
@@ -158,7 +161,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
                             Filter.TriState.STATE_INCLUDE -> "true"
                             Filter.TriState.STATE_EXCLUDE -> "false"
                             else -> ""
-                        }
+                        },
                     )
                 }
                 is GenreList -> {
@@ -166,6 +169,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
                         .filter { genre -> genre.state }
                         .forEach { genre -> url.addQueryParameter("genders[]", genre.id) }
                 }
+                else -> {}
             }
         }
 
@@ -183,8 +187,8 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
         genre = document.select("a.py-2").joinToString(", ") {
             it.text()
         }
-        description = document.select(".col-12.mt-2")?.text()
-        status = parseStatus(document.select(".status-publishing")?.text().orEmpty())
+        description = document.select(".col-12.mt-2").text()
+        status = parseStatus(document.select(".status-publishing").text().orEmpty())
         thumbnail_url = document.select(".text-center img.img-fluid").attr("src")
     }
 
@@ -204,15 +208,14 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
 
         // Regular list of chapters
         val chapterNames = document.select("#chapters h4.text-truncate")
-        val chapterNumbers = chapterNames.map { it.text().substringAfter("Capítulo").substringBefore("|").trim().toFloat() }
         val chapterInfos = document.select("#chapters .chapter-list")
 
         chapterNames.forEachIndexed { index, _ ->
             val scanlator = chapterInfos[index].select("li")
             if (getScanlatorPref()) {
-                scanlator.forEach { add(regularChapterFromElement(chapterNames[index].text(), it, chapterNumbers[index])) }
+                scanlator.forEach { add(regularChapterFromElement(chapterNames[index].text(), it)) }
             } else {
-                scanlator.last { add(regularChapterFromElement(chapterNames[index].text(), it, chapterNumbers[index])) }
+                scanlator.last { add(regularChapterFromElement(chapterNames[index].text(), it)) }
             }
         }
     }
@@ -226,19 +229,18 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
     private fun oneShotChapterFromElement(element: Element) = SChapter.create().apply {
         url = element.select("div.row > .text-right > a").attr("href")
         name = "One Shot"
-        scanlator = element.select("div.col-12.col-sm-12.col-md-4.text-truncate span")?.text()
+        scanlator = element.select("div.col-12.col-sm-12.col-md-4.text-truncate span").text()
         date_upload = element.select("span.badge.badge-primary.p-2").first()?.text()?.let { parseChapterDate(it) }
             ?: 0
     }
 
-    private fun regularChapterFromElement(chapterName: String, info: Element, number: Float) = SChapter.create().apply {
+    private fun regularChapterFromElement(chapterName: String, info: Element) = SChapter.create().apply {
         url = info.select("div.row > .text-right > a").attr("href")
         name = chapterName
-        scanlator = info.select("div.col-12.col-sm-12.col-md-4.text-truncate span")?.text()
+        scanlator = info.select("div.col-12.col-sm-12.col-md-4.text-truncate span").text()
         date_upload = info.select("span.badge.badge-primary.p-2").first()?.text()?.let {
             parseChapterDate(it)
         } ?: 0
-        chapter_number = number
     }
 
     private fun parseChapterDate(date: String): Long {
@@ -247,44 +249,73 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
     }
 
     override fun pageListRequest(chapter: SChapter): Request {
-        val currentUrl = client.newCall(GET(chapter.url, headers)).execute().asJsoup().body().baseUri()
-
-        // Get /cascade instead of /paginate to get all pages at once
-        val newUrl = if (getPageMethodPref() == PAGE_METHOD_PREF_CASCADE && currentUrl.contains(PAGE_METHOD_PREF_PAGINATED)) {
-            currentUrl.substringBefore(PAGE_METHOD_PREF_PAGINATED) + PAGE_METHOD_PREF_CASCADE
-        } else if (getPageMethodPref() == PAGE_METHOD_PREF_PAGINATED && currentUrl.contains(PAGE_METHOD_PREF_CASCADE)) {
-            currentUrl.substringBefore(PAGE_METHOD_PREF_CASCADE) + PAGE_METHOD_PREF_PAGINATED
-        } else currentUrl
-
-        return GET(newUrl, headers)
+        return GET(chapter.url, headers)
     }
 
     override fun pageListParse(document: Document): List<Page> = mutableListOf<Page>().apply {
-        if (getPageMethodPref() == PAGE_METHOD_PREF_CASCADE) {
-            document.select("div.viewer-image-container img").forEach {
-                add(
-                    Page(
-                        size,
-                        document.baseUri(),
-                        it.let {
-                            if (it.hasAttr("data-src")) it.attr("abs:data-src")
-                            else it.attr("abs:src")
-                        }
-                    )
-                )
-            }
-        } else {
-            val body = document.select("script:containsData(var dirPath)").first().data()
-            val path = body.substringAfter("var dirPath = '").substringBefore("'")
+        var doc = redirectToReadPage(document)
+        val currentUrl = doc.location()
 
-            body.substringAfter("var images = JSON.parse('[")
-                .substringBefore("]')")
-                .replace("\"", "")
-                .split(",")
-                .forEach {
-                    add(Page(size, document.baseUri(), path + it))
-                }
+        val newUrl = if (!currentUrl.contains("cascade")) {
+            currentUrl.substringBefore("paginated") + "cascade"
+        } else {
+            currentUrl
         }
+
+        if (currentUrl != newUrl) {
+            doc = client.newCall(GET(newUrl, headers)).execute().asJsoup()
+        }
+
+        doc.select("div.viewer-container img:not(noscript img)").forEach {
+            add(
+                Page(
+                    size,
+                    doc.location(),
+                    it.let {
+                        if (it.hasAttr("data-src")) {
+                            it.attr("abs:data-src")
+                        } else {
+                            it.attr("abs:src")
+                        }
+                    },
+                ),
+            )
+        }
+    }
+
+    // Some chapters uses JavaScript to redirect to read page
+    private fun redirectToReadPage(document: Document): Document {
+        val script1 = document.selectFirst("script:containsData(uniqid)")
+        val script2 = document.selectFirst("script:containsData(window.location.replace)")
+
+        val redirectHeaders = Headers.Builder()
+            .add("Referer", document.baseUri())
+            .build()
+
+        if (script1 != null) {
+            val data = script1.data()
+            val regexParams = """\{uniqid:'(.+)',cascade:(.+)\}""".toRegex()
+            val regexAction = """form\.action\s?=\s?'(.+)'""".toRegex()
+            val params = regexParams.find(data)!!
+            val action = regexAction.find(data)!!.groupValues[1]
+
+            val formBody = FormBody.Builder()
+                .add("uniqid", params.groupValues[1])
+                .add("cascade", params.groupValues[2])
+                .build()
+
+            return redirectToReadPage(client.newCall(POST(action, redirectHeaders, formBody)).execute().asJsoup())
+        }
+
+        if (script2 != null) {
+            val data = script2.data()
+            val regexRedirect = """window\.location\.replace\('(.+)'\)""".toRegex()
+            val url = regexRedirect.find(data)!!.groupValues[1]
+
+            return redirectToReadPage(client.newCall(GET(url, redirectHeaders)).execute().asJsoup())
+        }
+
+        return document
     }
 
     override fun imageRequest(page: Page) = GET(
@@ -292,10 +323,10 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
         headers = headers.newBuilder()
             .removeAll("Referer")
             .add("Referer", page.url.substringBefore("news/"))
-            .build()
+            .build(),
     )
 
-    override fun imageUrlParse(document: Document): String = document.select("img.viewer-image").attr("data-src")
+    override fun imageUrlParse(document: Document) = throw Exception("Not Used")
 
     private fun searchMangaByIdRequest(id: String) = GET("$baseUrl/$MANGA_URL_CHUNK/$id", headers)
 
@@ -329,8 +360,8 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
             Pair("Novela", "novel"),
             Pair("One shot", "one_shot"),
             Pair("Doujinshi", "doujinshi"),
-            Pair("Oel", "oel")
-        )
+            Pair("Oel", "oel"),
+        ),
     )
 
     private class Demography : UriPartFilter(
@@ -341,8 +372,8 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
             Pair("Shoujo", "shoujo"),
             Pair("Shounen", "shounen"),
             Pair("Josei", "josei"),
-            Pair("Kodomo", "kodomo")
-        )
+            Pair("Kodomo", "kodomo"),
+        ),
     )
 
     private class FilterBy : UriPartFilter(
@@ -350,14 +381,14 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
         arrayOf(
             Pair("Título", "title"),
             Pair("Autor", "author"),
-            Pair("Compañia", "company")
-        )
+            Pair("Compañia", "company"),
+        ),
     )
 
     class SortBy : Filter.Sort(
         "Ordenar por",
         SORTABLES.map { it.first }.toTypedArray(),
-        Selection(0, false)
+        Selection(0, false),
     )
 
     private class WebcomicFilter : Filter.TriState("Webcomic")
@@ -383,7 +414,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
         FourKomaFilter(),
         AmateurFilter(),
         EroticFilter(),
-        GenreList(getGenreList())
+        GenreList(getGenreList()),
     )
 
     // Array.from(document.querySelectorAll('#advancedSearch .custom-checkbox'))
@@ -438,7 +469,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
         Genre("Realidad", "45"),
         Genre("Telenovela", "46"),
         Genre("Guerra", "47"),
-        Genre("Oeste", "48")
+        Genre("Oeste", "48"),
     )
 
     private open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) :
@@ -447,7 +478,6 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
     }
 
     override fun setupPreferenceScreen(screen: androidx.preference.PreferenceScreen) {
-
         val scanlatorPref = androidx.preference.CheckBoxPreference(screen.context).apply {
             key = SCANLATOR_PREF
             title = SCANLATOR_PREF_TITLE
@@ -457,25 +487,6 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
             setOnPreferenceChangeListener { _, newValue ->
                 val checkValue = newValue as Boolean
                 preferences.edit().putBoolean(SCANLATOR_PREF, checkValue).commit()
-            }
-        }
-
-        val pageMethodPref = androidx.preference.ListPreference(screen.context).apply {
-            key = PAGE_METHOD_PREF
-            title = PAGE_METHOD_PREF_TITLE
-            entries = arrayOf("Cascada", "Páginado")
-            entryValues = arrayOf(PAGE_METHOD_PREF_CASCADE, PAGE_METHOD_PREF_PAGINATED)
-            summary = PAGE_METHOD_PREF_SUMMARY
-            setDefaultValue(PAGE_METHOD_PREF_DEFAULT_VALUE)
-
-            setOnPreferenceChangeListener { _, newValue ->
-                try {
-                    val setting = preferences.edit().putString(PAGE_METHOD_PREF, newValue as String).commit()
-                    setting
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    false
-                }
             }
         }
 
@@ -519,14 +530,11 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
         }
 
         screen.addPreference(scanlatorPref)
-        screen.addPreference(pageMethodPref)
         screen.addPreference(apiRateLimitPreference)
         screen.addPreference(imgCDNRateLimitPreference)
     }
 
     private fun getScanlatorPref(): Boolean = preferences.getBoolean(SCANLATOR_PREF, SCANLATOR_PREF_DEFAULT_VALUE)
-
-    private fun getPageMethodPref() = preferences.getString(PAGE_METHOD_PREF, PAGE_METHOD_PREF_DEFAULT_VALUE)
 
     companion object {
         private const val SCANLATOR_PREF = "scanlatorPref"
@@ -534,26 +542,23 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
         private const val SCANLATOR_PREF_SUMMARY = "Se mostraran capítulos repetidos pero con diferentes Scanlators"
         private const val SCANLATOR_PREF_DEFAULT_VALUE = true
 
-        private const val PAGE_METHOD_PREF = "pageMethodPref"
-        private const val PAGE_METHOD_PREF_TITLE = "Método para descargar imágenes"
-        private const val PAGE_METHOD_PREF_SUMMARY = "Previene ser banneado por el servidor cuando se usa la configuración \"Cascada\" ya que esta reduce la cantidad de solicitudes.\nPuedes usar \"Páginado\" cuando las imágenes no carguen usando \"Cascada\".\nConfiguración actual: %s"
-        private const val PAGE_METHOD_PREF_CASCADE = "cascade"
-        private const val PAGE_METHOD_PREF_PAGINATED = "paginated"
-        private const val PAGE_METHOD_PREF_DEFAULT_VALUE = PAGE_METHOD_PREF_CASCADE
-
         private const val WEB_RATELIMIT_PREF = "webRatelimitPreference"
+
         // Ratelimit permits per second for main website
         private const val WEB_RATELIMIT_PREF_TITLE = "Ratelimit por minuto para el sitio web"
+
         // This value affects network request amount to TMO url. Lower this value may reduce the chance to get HTTP 429 error, but loading speed will be slower too. Tachiyomi restart required. \nCurrent value: %s
         private const val WEB_RATELIMIT_PREF_SUMMARY = "Este valor afecta la cantidad de solicitudes de red a la URL de TMO. Reducir este valor puede disminuir la posibilidad de obtener un error HTTP 429, pero la velocidad de descarga será más lenta. Se requiere reiniciar Tachiyomi. \nValor actual: %s"
-        private const val WEB_RATELIMIT_PREF_DEFAULT_VALUE = "10"
+        private const val WEB_RATELIMIT_PREF_DEFAULT_VALUE = "8"
 
         private const val IMAGE_CDN_RATELIMIT_PREF = "imgCDNRatelimitPreference"
+
         // Ratelimit permits per second for image CDN
         private const val IMAGE_CDN_RATELIMIT_PREF_TITLE = "Ratelimit por minuto para descarga de imágenes"
+
         // This value affects network request amount for loading image. Lower this value may reduce the chance to get error when loading image, but loading speed will be slower too. Tachiyomi restart required. \nCurrent value: %s
         private const val IMAGE_CDN_RATELIMIT_PREF_SUMMARY = "Este valor afecta la cantidad de solicitudes de red para descargar imágenes. Reducir este valor puede disminuir errores al cargar imagenes, pero la velocidad de descarga será más lenta. Se requiere reiniciar Tachiyomi. \nValor actual: %s"
-        private const val IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE = "10"
+        private const val IMAGE_CDN_RATELIMIT_PREF_DEFAULT_VALUE = "50"
 
         private val ENTRIES_ARRAY = arrayOf("1", "2", "3", "5", "6", "7", "8", "9", "10", "15", "20", "30", "40", "50", "100")
 
@@ -565,7 +570,7 @@ class LectorManga : ConfigurableSource, ParsedHttpSource() {
             Pair("Alfabético", "alphabetically"),
             Pair("Puntuación", "score"),
             Pair("Creación", "creation"),
-            Pair("Fecha estreno", "release_date")
+            Pair("Fecha estreno", "release_date"),
         )
     }
 }

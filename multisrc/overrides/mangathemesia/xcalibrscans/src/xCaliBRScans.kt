@@ -8,13 +8,10 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import java.util.concurrent.TimeUnit
 
 class xCaliBRScans : MangaThemesia("xCaliBR Scans", "https://xcalibrscans.com", "en") {
 
-    override val client: OkHttpClient = network.cloudflareClient.newBuilder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+    override val client: OkHttpClient = super.client.newBuilder()
         .addInterceptor(AntiScrapInterceptor())
         .rateLimit(2)
         .build()
@@ -31,7 +28,7 @@ class xCaliBRScans : MangaThemesia("xCaliBR Scans", "https://xcalibrscans.com", 
             .forEach { element ->
                 when {
                     element.tagName() == "p" -> {
-                        val imgUrl = element.selectFirst("img").imgAttr()
+                        val imgUrl = element.selectFirst("img")!!.imgAttr()
                         imgUrls.add(imgUrl)
                     }
                     element.tagName() == "div" && element.hasClass("kage") -> {

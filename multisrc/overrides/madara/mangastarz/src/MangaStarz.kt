@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import org.jsoup.nodes.Element
 
 class MangaStarz : Madara("Manga Starz", "https://mangastarz.com", "ar") {
+
     override fun popularMangaFromElement(element: Element): SManga {
         val manga = SManga.create()
 
@@ -21,4 +22,6 @@ class MangaStarz : Madara("Manga Starz", "https://mangastarz.com", "ar") {
 
         return manga
     }
+
+    override val chapterUrlSuffix = ""
 }

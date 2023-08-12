@@ -6,15 +6,13 @@ import eu.kanade.tachiyomi.source.SourceFactory
 class KomikLabFactory : SourceFactory {
     override fun createSources() = listOf(
         KomikLabEn(),
-        KomikLabId()
+        KomikLabId(),
     )
 }
 
-class KomikLabEn : MangaThemesia("KomikLab Scans", "https://scans.komiklab.com", "en") {
-    override val hasProjectPage = true
-}
+class KomikLabEn : MangaThemesia("KomikLab Scans", "https://komiklab.com", "en")
 
-class KomikLabId : MangaThemesia("Komik Lab", "https://komiklab.com", "id") {
+class KomikLabId : MangaThemesia("Komik Lab", "https://komiklab.net", "id") {
     override val hasProjectPage = true
 
     override val seriesDetailsSelector = ".seriestucon"

@@ -2,10 +2,10 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
 ext {
-    extName = 'mcreader.net'
+    extName = 'MangaGeko'
     pkgNameSuffix = 'en.mangarawclub'
     extClass = '.MangaRawClub'
-    extVersionCode = 15
+    extVersionCode = 18
     isNsfw = true
 }
 

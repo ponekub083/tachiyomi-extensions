@@ -15,79 +15,147 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Request
 import okhttp3.Response
-import org.jsoup.nodes.Element
+import okio.blackholeSink
 import org.jsoup.select.Evaluator
 import rx.Observable
-import rx.Single
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+import java.io.IOException
 import java.util.TimeZone
+import kotlin.math.min
 
 open class Kemono(
     override val name: String,
-    override val baseUrl: String,
+    private val defaultUrl: String,
     override val lang: String = "all",
 ) : HttpSource(), ConfigurableSource {
     override val supportsLatest = true
 
+    private val mirrorUrls get() = arrayOf(defaultUrl, defaultUrl.removeSuffix(".party") + ".su")
+
     override val client = network.client.newBuilder().rateLimit(2).build()
+
+    override fun headersBuilder() = super.headersBuilder()
+        .add("Referer", "$baseUrl/")
 
     private val json: Json by injectLazy()
 
-    private val preferences by lazy {
+    private val preferences =
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
+
+    override val baseUrl = preferences.getString(BASE_URL_PREF, defaultUrl)!!
+
+    private val imgCdnUrl = when (name) {
+        "Kemono" -> baseUrl
+        else -> defaultUrl
+    }.replace("//", "//img.")
+
+    private fun String.formatAvatarUrl(): String = removePrefix("https://").replaceBefore('/', imgCdnUrl)
+
+    override fun popularMangaRequest(page: Int) = throw UnsupportedOperationException()
+
+    override fun popularMangaParse(response: Response) = throw UnsupportedOperationException()
+
+    override fun latestUpdatesRequest(page: Int) = throw UnsupportedOperationException()
+
+    override fun latestUpdatesParse(response: Response) = throw UnsupportedOperationException()
+
+    override fun fetchPopularManga(page: Int): Observable<MangasPage> {
+        return Observable.fromCallable {
+            fetchNewDesignListing(page, "/artists", compareByDescending { it.favorited })
+        }
     }
 
-    override fun popularMangaRequest(page: Int): Request =
-        GET("$baseUrl/artists?o=${PAGE_SIZE * (page - 1)}", headers)
+    override fun fetchLatestUpdates(page: Int): Observable<MangasPage> {
+        return Observable.fromCallable {
+            fetchNewDesignListing(page, "/artists/updated", compareByDescending { it.updatedDate })
+        }
+    }
 
-    override fun popularMangaParse(response: Response): MangasPage {
-        val document = response.asJsoup()
-        val cardList = document.selectFirst(Evaluator.Class("card-list"))
-        val creators = cardList.select(Evaluator.Tag("article")).map {
-            val children = it.children()
-            val avatar = children[0].selectFirst(Evaluator.Tag("img")).attr("src")
-            val link = children[1].child(0)
-            val service = children[2].ownText()
-            SManga.create().apply {
-                url = link.attr("href")
-                title = link.ownText()
-                author = service
-                thumbnail_url = baseUrl + avatar
-                description = PROMPT
-                initialized = true
+    private fun fetchNewDesignListing(
+        page: Int,
+        path: String,
+        comparator: Comparator<KemonoCreatorDto>,
+    ): MangasPage {
+        val baseUrl = baseUrl
+        return if (page == 1) {
+            val document = client.newCall(GET(baseUrl + path, headers)).execute().asJsoup()
+            val cardList = document.selectFirst(Evaluator.Class("card-list__items"))!!
+            val creators = cardList.children().map {
+                SManga.create().apply {
+                    url = it.attr("href")
+                    title = it.selectFirst(Evaluator.Class("user-card__name"))!!.ownText()
+                    author = it.selectFirst(Evaluator.Class("user-card__service"))!!.ownText()
+                    thumbnail_url = it.selectFirst(Evaluator.Tag("img"))!!.absUrl("src").formatAvatarUrl()
+                    description = PROMPT
+                    initialized = true
+                }
+            }.filterUnsupported()
+            MangasPage(creators, true).also { cacheCreators() }
+        } else {
+            fetchCreatorsPage(page) { it.apply { sortWith(comparator) } }
+        }
+    }
+
+    override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> = Observable.fromCallable {
+        if (query.isBlank()) throw Exception("Query is empty")
+        fetchCreatorsPage(page) { all ->
+            val result = all.filterTo(ArrayList()) { it.name.contains(query, ignoreCase = true) }
+            if (result.isEmpty()) return@fetchCreatorsPage emptyList()
+            if (result[0].favorited != -1) {
+                result.sortByDescending { it.favorited }
+            } else {
+                result.sortByDescending { it.updatedDate }
             }
-        }.filterUnsupported()
-        return MangasPage(creators, document.hasNextPage())
+            result
+        }
     }
 
-    override fun latestUpdatesRequest(page: Int): Request =
-        GET("$baseUrl/artists/updated?o=${PAGE_SIZE * (page - 1)}", headers)
-
-    override fun latestUpdatesParse(response: Response) = popularMangaParse(response)
-
-    override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> = Single.create<MangasPage> { subscriber ->
-        val baseUrl = this.baseUrl
+    private fun fetchCreatorsPage(
+        page: Int,
+        block: (ArrayList<KemonoCreatorDto>) -> List<KemonoCreatorDto>,
+    ): MangasPage {
+        val imgCdnUrl = this.imgCdnUrl
         val response = client.newCall(GET("$baseUrl/api/creators", headers)).execute()
-        val result = response.parseAs<List<KemonoCreatorDto>>()
-            .filter { it.name.contains(query, ignoreCase = true) }
-            .sortedByDescending { it.updatedDate }
-            .map { it.toSManga(baseUrl) }
+        val allCreators = block(response.parseAs())
+        val count = allCreators.size
+        val fromIndex = (page - 1) * NEW_PAGE_SIZE
+        val toIndex = min(count, fromIndex + NEW_PAGE_SIZE)
+        val creators = allCreators.subList(fromIndex, toIndex)
+            .map { it.toSManga(imgCdnUrl) }
             .filterUnsupported()
-        subscriber.onSuccess(MangasPage(result, false))
-    }.toObservable()
+        return MangasPage(creators, toIndex < count)
+    }
 
-    override fun searchMangaRequest(page: Int, query: String, filters: FilterList) = throw UnsupportedOperationException("Not used.")
-    override fun searchMangaParse(response: Response) = throw UnsupportedOperationException("Not used.")
+    private fun cacheCreators() {
+        val callback = object : Callback {
+            override fun onResponse(call: Call, response: Response) =
+                response.body.source().run {
+                    readAll(blackholeSink())
+                    close()
+                }
 
-    override fun fetchMangaDetails(manga: SManga): Observable<SManga> = Observable.just(manga)
+            override fun onFailure(call: Call, e: IOException) = Unit
+        }
+        client.newCall(GET("$baseUrl/api/creators", headers)).enqueue(callback)
+    }
 
-    override fun mangaDetailsParse(response: Response) = throw UnsupportedOperationException("Not used.")
+    override fun searchMangaRequest(page: Int, query: String, filters: FilterList) = throw UnsupportedOperationException()
+    override fun searchMangaParse(response: Response) = throw UnsupportedOperationException()
 
-    override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> = Single.create<List<SChapter>> {
+    override fun fetchMangaDetails(manga: SManga): Observable<SManga> {
+        manga.thumbnail_url = manga.thumbnail_url!!.formatAvatarUrl()
+        return Observable.just(manga)
+    }
+
+    override fun mangaDetailsParse(response: Response) = throw UnsupportedOperationException()
+
+    override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> = Observable.fromCallable {
         KemonoPostDto.dateFormat.timeZone = when (manga.author) {
             "Pixiv Fanbox", "Fantia" -> TimeZone.getTimeZone("GMT+09:00")
             else -> TimeZone.getTimeZone("GMT")
@@ -104,10 +172,10 @@ open class Kemono(
             offset += POST_PAGE_SIZE
             hasNextPage = page.size == POST_PAGE_SIZE
         }
-        it.onSuccess(result)
-    }.toObservable()
+        result
+    }
 
-    override fun chapterListParse(response: Response) = throw UnsupportedOperationException("Not used.")
+    override fun chapterListParse(response: Response) = throw UnsupportedOperationException()
 
     override fun pageListRequest(chapter: SChapter): Request =
         GET("$baseUrl/api${chapter.url}", headers)
@@ -117,10 +185,10 @@ open class Kemono(
         return post[0].images.mapIndexed { i, path -> Page(i, imageUrl = baseUrl + path) }
     }
 
-    override fun imageUrlParse(response: Response) = throw UnsupportedOperationException("Not used.")
+    override fun imageUrlParse(response: Response) = throw UnsupportedOperationException()
 
     private inline fun <reified T> Response.parseAs(): T = use {
-        json.decodeFromStream(it.body!!.byteStream())
+        json.decodeFromStream(it.body.byteStream())
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -134,10 +202,19 @@ open class Kemono(
             }.toTypedArray()
             setDefaultValue(POST_PAGES_DEFAULT)
         }.let { screen.addPreference(it) }
+
+        ListPreference(screen.context).apply {
+            key = BASE_URL_PREF
+            title = "Mirror URL"
+            summary = "%s\nRequires app restart to take effect"
+            entries = mirrorUrls
+            entryValues = mirrorUrls
+            setDefaultValue(defaultUrl)
+        }.let(screen::addPreference)
     }
 
     companion object {
-        private const val PAGE_SIZE = 25
+        private const val NEW_PAGE_SIZE = 50
         const val PROMPT = "You can change how many posts to load in the extension preferences."
 
         private const val POST_PAGE_SIZE = 50
@@ -145,11 +222,8 @@ open class Kemono(
         private const val POST_PAGES_DEFAULT = "1"
         private const val POST_PAGES_MAX = 50
 
-        private fun Element.hasNextPage(): Boolean {
-            val pagination = selectFirst(Evaluator.Class("paginator"))
-            return pagination.selectFirst("a[title=Next page]") != null
-        }
-
         private fun List<SManga>.filterUnsupported() = filterNot { it.author == "Discord" }
+
+        private const val BASE_URL_PREF = "BASE_URL"
     }
 }
